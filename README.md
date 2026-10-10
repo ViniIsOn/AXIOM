@@ -1,35 +1,43 @@
-# AXIOM AI — Android 📱🤖
+# AXIOM AI — Android 0.2.0
 
-**Versão inicial 0.1.0 (experimental)**. Assistente com inferência de IA **no próprio celular**, sem computador, conta ou API paga. O modelo não está embutido no APK: baixe-o no app pela primeira vez.
+Assistente de IA independente para Android, com motor llama.cpp e modelo Qwen2.5-0.5B-Instruct local em GGUF. **Não usa API paga.** O modelo deve ser baixado pela primeira vez (~398 MB). Depois funciona offline.
 
-## Cérebro local
+## Novidades da versão 0.2
 
-- Motor de inferência: [llama-kotlin-android 0.1.0](https://github.com/CodeShipping/llama-kotlin-android) (usa llama.cpp).
-- Modelo padrão: [Qwen2.5-0.5B-Instruct Q4_K_M](https://huggingface.co/bartowski/Qwen2.5-0.5B-Instruct-GGUF), ~398 MB. Licença do modelo base: Apache-2.0.
-- Pode importar um arquivo **GGUF** compatível pelo seletor de arquivos Android.
-- Histórico salvo no armazenamento privado do app.
-- Não precisa de internet para conversar depois do download.
-- **Limites:** modelo pequeno com erros possíveis, velocidade condicionada ao celular, contexto de conversa reduzido; ainda não tem pesquisa na web nem ferramentas externas.
+- Chat escuro redesenhado com fonte sans-serif, cabeçalho compacto e respostas separadas por autor.
+- Histórico **persistente no SQLite** do próprio app; botão ☰ alterna entre conversas, botão ＋ inicia outra.
+- Salva mensagens ao enviar, respostas durante a geração (em intervalos) e ao concluir.
+- Cada chat recebe um título automático, com opção de limpar ou excluir.
+- Rascunhos por conversa em SharedPreferences, salvos enquanto você digita.
+- Migrador do histórico antigo `conversation` da v0.1, **quando a atualização preserva os dados do Android**.
+- Backup manual em JSON: ☰ → Opções → Exportar backup; para restaurar, Importar backup.
+- Toque e segure uma resposta para copiá-la.
+- Preserva o `applicationId=com.viniison.axiom`, caminho do modelo GGUF e configurações já existentes.
 
-## Como obter o APK pelo celular
+## Instalação no celular
 
-1. Abra [Actions](https://github.com/ViniIsOn/AXIOM/actions) neste repositório.
-2. Escolha o fluxo **AXIOM Android APK** e a execução mais recente com símbolo verde.
-3. Abra a seção **Artifacts** e baixe `AXIOM-AI-Android-v0.1`.
-4. Extraia o ZIP do GitHub e instale `app-debug.apk` (autorize a instalação para seu gerenciador de arquivos apenas quando o Android solicitar).
-5. Abra AXIOM AI, pressione **Baixar IA** e aguarde o download de ~398 MB no Wi-Fi. Depois você pode conversar sem internet.
+1. Abra [Releases](https://github.com/ViniIsOn/AXIOM/releases) e baixe o APK da versão **0.2**.
+2. Tente instalar por cima da v0.1, **sem desinstalar primeiro**. Se o Android informar "app não instalado", veja o aviso de assinatura abaixo.
+3. Abra o app e confira se o histórico e o modelo estão acessíveis. Se for a primeira instalação, use Modelo → Baixar IA.
 
-> O GitHub Actions produz **APK de debug** para testes. Não é um APK assinado para publicar na Play Store. O Android pode emitir um aviso de instalação; instale apenas do seu próprio repositório. Nunca publique chaves privadas ou assinaturas no repositório público.
+### ATENÇÃO: assinatura de APK de teste
 
-## Desenvolvedor
+A versão v0.1 foi criada com uma chave debug gerada pelo GitHub Actions, que pode **não ser a mesma da v0.2**. Isso impede instalação por cima e NÃO é um problema do código. Neste caso, **não desinstale** se quer manter dados da v0.1: esse app não tinha exportação de histórico. Desinstalar apaga o histórico privado e o GGUF, exigindo novo download.
 
-- Android Kotlin nativo + layouts XML.
-- Compilação por GitHub Actions gratuita dentro das cotas do GitHub para repositórios públicos.
-- `applicationId`: `com.viniison.axiom`
-- minSdk 26, arm64-v8a.
+A partir da v0.2 a automação usa cache do debug.keystore de testes para tentar manter a mesma assinatura nas próximas compilacões. **Cache pode expirar ou ser removido**, portanto não é garantia de atualização. Antes de atualizações futuras, exporte backups de conversa. Para distribuição estável, configurar uma chave de assinatura privada no GitHub Actions Secrets (não publique chave privada no repositório).
 
-## Fontes e créditos
+O arquivo JSON não inclui os pesos GGUF nem senhas. Guarde-o em lugar privado: contém o texto das conversas.
 
-- Motor: biblioteca [CodeShipping / llama-kotlin-android](https://github.com/CodeShipping/llama-kotlin-android).
-- Pesos: [bartowski/Qwen2.5-0.5B-Instruct-GGUF](https://huggingface.co/bartowski/Qwen2.5-0.5B-Instruct-GGUF).
-- AXIOM integra esses componentes em um aplicativo próprio. Não desenvolvemos um novo modelo fundacional do zero.
+## Tecnologias
+
+Android nativo/Kotlin/XML, SQLiteOpenHelper, [llama-kotlin-android](https://github.com/CodeShipping/llama-kotlin-android) e [GGUF Qwen2.5-0.5B-Instruct](https://huggingface.co/bartowski/Qwen2.5-0.5B-Instruct-GGUF).
+
+### Limitações
+
+- Modelo pequeno: pode errar ou demorar para responder.
+- Sem pesquisa na web ou ferramentas externas nesta versão.
+- Histórico completo fica salvo no aparelho, mas **apenas as mensagens recentes entram no contexto enviado ao modelo**, para limitar RAM.
+- A importação de backup aceita arquivos JSON de até 4 MB, no máximo 300 conversas e 3 mil mensagens por conversa.
+- APK debug de testes, não release pronto para Play Store.
+
+Fonte e créditos no repositório.

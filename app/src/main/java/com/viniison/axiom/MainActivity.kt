@@ -1,6 +1,14 @@
 package com.viniison.axiom
 
+import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.graphics.Typeface
+import android.os.SystemClock
+import android.text.Editable
+import android.text.TextWatcher
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
@@ -51,6 +59,8 @@ class MainActivity : ComponentActivity() {
     private var generation: Job? = null
     private var busy = false
     private val history = mutableListOf<Message>()
+    private val store by lazy { ChatStore(this) }
+    private var currentChatId = -1L
     private val prefs by lazy { getSharedPreferences("axiom_local", MODE_PRIVATE) }
 
     private val defaultModelUrl =
@@ -59,6 +69,46 @@ class MainActivity : ComponentActivity() {
 
     private val pickModel = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importModel(uri)
+    }
+
+    private val exportBackup = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) lifecycleScope.launch {
+            try {
+                val json = withContext(Dispatchers.IO) { store.exportJson() }
+                withContext(Dispatchers.IO) {
+                    contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+                        ?: error("Arquivo inacessível")
+                }
+                setStatus("Backup exportado com sucesso.")
+            } catch (e: Exception) {
+                setStatus("Falha ao exportar backup: ${e.message}")
+            }
+        }
+    }
+
+    private val importBackup = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) lifecycleScope.launch {
+            try {
+                val data = withContext(Dispatchers.IO) {
+                    contentResolver.openInputStream(uri)?.use { stream ->
+                        val buffer = java.io.ByteArrayOutputStream()
+                        val bytes = ByteArray(16_384)
+                        while (true) {
+                            val n = stream.read(bytes)
+                            if (n < 0) break
+                            if (buffer.size() + n > 4_000_000) error("Backup acima de 4 MB")
+                            buffer.write(bytes, 0, n)
+                        }
+                        buffer.toString("UTF-8")
+                    } ?: error("Não foi possível abrir o backup")
+                }
+                val count = withContext(Dispatchers.IO) { store.importJson(data) }
+                setStatus("Backup importado: ${count} conversa(s).")
+                store.threads().firstOrNull()?.id?.let { openChat(it) }
+            } catch (e: Exception) {
+                setStatus("Falha ao importar backup: ${e.message}")
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,9 +125,11 @@ class MainActivity : ComponentActivity() {
         download = findViewById(R.id.btnDownload)
         import = findViewById(R.id.btnImport)
 
-        findViewById<Button>(R.id.btnSettings).setOnClickListener {
+        findViewById<TextView>(R.id.btnSettings).setOnClickListener {
             panel.visibility = if (panel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         }
+        findViewById<TextView>(R.id.btnHistory).setOnClickListener { if (!busy) showHistory() }
+        findViewById<TextView>(R.id.btnNew).setOnClickListener { if (!busy) newChat() }
         download.setOnClickListener { downloadDefault() }
         import.setOnClickListener { if (!busy) pickModel.launch(arrayOf("*/*")) }
         send.setOnClickListener { sendMessage() }
@@ -85,55 +137,171 @@ class MainActivity : ComponentActivity() {
             model?.cancelGeneration()
             generation?.cancel()
         }
-        findViewById<TextView>(R.id.btnClear).setOnClickListener {
-            if (!busy) {
-                history.clear()
-                prefs.edit().remove("conversation").apply()
-                messagesView.removeAllViews()
-                welcome()
-                setStatus("Conversa limpa.")
-            }
-        }
 
-        restoreHistory()
-        if (history.isEmpty()) welcome()
+        store.migrateLegacy(prefs)
+        val previous = prefs.getLong("current_chat_id", -1L)
+        val threadId = if (store.hasThread(previous)) previous
+            else store.threads().firstOrNull()?.id ?: store.newThread()
+        openChat(threadId)
+        input.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (currentChatId > 0L) {
+                    prefs.edit().putString("draft_$currentChatId", s?.toString() ?: "").apply()
+                }
+            }
+        })
+
         val savedPath = prefs.getString("model_path", null)
         if (savedPath != null && File(savedPath).exists()) {
+            panel.visibility = View.GONE
             loadModel(File(savedPath))
         } else {
-            setStatus("Modelo não instalado • baixe gratuitamente ou importe um GGUF.")
+            panel.visibility = View.VISIBLE
+            setStatus("Configure o modelo local para iniciar.")
         }
     }
 
     private fun welcome() {
-        bubble("Olá! Eu sou a AXIOM. 🤖\n\nBaixe meu cérebro local para começarmos. Depois disso, posso responder mesmo sem internet. Minhas respostas podem conter erros.", "assistant")
+        val greeting = TextView(this).apply {
+            text = "✦\n\nO que vamos criar hoje?\n\nSou a AXIOM, sua assistente de IA local.\nAs conversas ficam salvas neste aparelho."
+            setTextColor(Color.parseColor("#E9F2F1"))
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+            textSize = 17f
+            gravity = Gravity.CENTER
+            setPadding(dp(14), dp(75), dp(14), dp(16))
+        }
+        messagesView.addView(greeting)
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     private fun bubble(content: String, role: String): TextView {
+        val mine = role == "user"
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = if (mine) Gravity.END else Gravity.START
+            setPadding(dp(7), dp(9), dp(7), dp(9))
+        }
+
+        if (!mine) {
+            val identity = TextView(this).apply {
+                text = "✦  AXIOM"
+                textSize = 12f
+                setTextColor(Color.parseColor("#55D5C5"))
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                setPadding(0, 0, 0, dp(7))
+            }
+            row.addView(identity)
+        }
+
         val text = TextView(this).apply {
             this.text = content
             textSize = 15f
-            setTextColor(Color.WHITE)
-            setPadding(dp(14), dp(11), dp(14), dp(11))
+            setTextColor(Color.parseColor("#F0F2F6"))
+            typeface = Typeface.create("sans-serif", Typeface.NORMAL)
             setTextIsSelectable(true)
-            background = GradientDrawable().apply {
-                cornerRadius = dp(18).toFloat()
-                setColor(Color.parseColor(if (role == "user") "#174E64" else "#172743"))
+            setLineSpacing(dp(3).toFloat(), 1f)
+            if (mine) {
+                setPadding(dp(16), dp(12), dp(16), dp(12))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(22).toFloat()
+                    setColor(Color.parseColor("#29313B"))
+                }
+                maxWidth = resources.displayMetrics.widthPixels - dp(85)
+            } else {
+                setPadding(0, 0, dp(5), dp(4))
             }
         }
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = if (role == "user") Gravity.END else Gravity.START
-            setPadding(0, dp(5), 0, dp(5))
-        }
         row.addView(text, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { width = dp(320).coerceAtMost(resources.displayMetrics.widthPixels - dp(64)) })
+            if (mine) LinearLayout.LayoutParams.WRAP_CONTENT else LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+        text.setOnLongClickListener {
+            val clip = ClipData.newPlainText("AXIOM", text.text)
+            (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
+            Toast.makeText(this, "Texto copiado", Toast.LENGTH_SHORT).show()
+            true
+        }
         messagesView.addView(row)
         toBottom()
         return text
+    }
+
+    private fun openChat(id: Long) {
+        if (busy || !store.hasThread(id)) return
+        currentChatId = id
+        prefs.edit().putLong("current_chat_id", id).apply()
+        history.clear()
+        messagesView.removeAllViews()
+        store.messages(id).forEach {
+            history.add(Message(it.role, it.content))
+            bubble(it.content, it.role)
+        }
+        if (history.isEmpty()) welcome()
+        input.setText(prefs.getString("draft_$id", "") ?: "")
+        toBottom()
+    }
+
+    private fun newChat() {
+        if (busy) return
+        openChat(store.newThread())
+        setStatus(if (model != null) "● Modelo local pronto" else "Configure o modelo local")
+    }
+
+    private fun showHistory() {
+        val items = store.threads()
+        AlertDialog.Builder(this)
+            .setTitle("Suas conversas")
+            .setItems(items.map { it.title }.toTypedArray()) { _, index ->
+                openChat(items[index].id)
+            }
+            .setPositiveButton("Nova conversa") { _, _ -> newChat() }
+            .setNeutralButton("Opções") { _, _ -> showChatOptions() }
+            .setNegativeButton("Fechar", null)
+            .show()
+    }
+
+    private fun showChatOptions() {
+        val options = arrayOf(
+            "Limpar conversa atual", "Excluir conversa atual",
+            "Exportar backup (.json)", "Importar backup (.json)"
+        )
+        AlertDialog.Builder(this).setTitle("Conversas e dados")
+            .setItems(options) { _, choice ->
+                when (choice) {
+                    0 -> confirmClear()
+                    1 -> confirmDelete()
+                    2 -> exportBackup.launch("axiom-backup.json")
+                    3 -> importBackup.launch(arrayOf("application/json", "text/plain", "*/*"))
+                }
+            }.setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun confirmClear() {
+        AlertDialog.Builder(this).setTitle("Limpar conversa?")
+            .setMessage("As mensagens desta conversa serão apagadas do aparelho. Outras conversas serão mantidas.")
+            .setPositiveButton("Limpar") { _, _ ->
+                store.clearThread(currentChatId)
+                prefs.edit().remove("draft_$currentChatId").apply()
+                openChat(currentChatId)
+                setStatus("Conversa limpa.")
+            }
+            .setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun confirmDelete() {
+        AlertDialog.Builder(this).setTitle("Excluir esta conversa?")
+            .setMessage("A exclusão é permanente, a menos que você tenha exportado um backup.")
+            .setPositiveButton("Excluir") { _, _ ->
+                val deleted = currentChatId
+                store.deleteThread(deleted)
+                prefs.edit().remove("draft_$deleted").apply()
+                openChat(store.threads().firstOrNull()?.id ?: store.newThread())
+                setStatus("Conversa excluída.")
+            }
+            .setNegativeButton("Cancelar", null).show()
     }
 
     private fun toBottom() {
@@ -299,25 +467,30 @@ class MainActivity : ComponentActivity() {
         val message = input.text.toString().trim()
         if (message.isEmpty()) return
         input.text.clear()
+        val thread = currentChatId
+        val isFirst = history.none { it.role == "user" }
+        if (isFirst) store.setTitle(thread, message)
+        store.addMessage(thread, "user", message)
         history.add(Message("user", message))
+        if (isFirst) messagesView.removeAllViews()
         bubble(message, "user")
         val out = bubble("Pensando…", "assistant")
         setBusy(true)
         stop.visibility = View.VISIBLE
         send.visibility = View.GONE
-        setStatus("AXIOM está pensando no celular…")
+        setStatus("AXIOM está pensando…")
         val generated = StringBuilder()
+        var answerId = -1L
+        var lastSave = SystemClock.elapsedRealtime()
         generation = lifecycleScope.launch {
             try {
                 val turns = history.takeLast(6)
-                // Qwen2.5 Instruct usa ChatML. A versão Maven 0.1.0 do motor
-                // ainda não inclui applyChatTemplate(), por isso montamos
-                // o prompt explicitamente em vez de depender de API futura.
+                // Formato ChatML nativo do modelo Qwen2.5 Instruct.
                 val prompt = buildString {
                     append("<|im_start|>system\n")
-                    append("Você é AXIOM AI, uma assistente local em português brasileiro. ")
-                    append("Seja gentil, útil, objetiva e racional. ")
-                    append("Não invente acesso à internet ou a ferramentas. Admita incerteza.")
+                    append("Você é AXIOM AI, assistente local em português brasileiro. ")
+                    append("Seja gentil, objetiva e racional. Não invente acesso à internet nem ferramentas. ")
+                    append("Admita incerteza e nunca peça dados sensíveis.")
                     append("<|im_end|>\n")
                     for (item in turns) {
                         append("<|im_start|>")
@@ -331,50 +504,32 @@ class MainActivity : ComponentActivity() {
                 activeModel.generateStream(prompt).collect { chunk ->
                     generated.append(chunk)
                     out.text = generated.toString()
+                    val now = SystemClock.elapsedRealtime()
+                    if (answerId < 0L) {
+                        answerId = store.addMessage(thread, "assistant", generated.toString())
+                        lastSave = now
+                    } else if (now - lastSave > 450L) {
+                        store.updateMessage(answerId, generated.toString())
+                        lastSave = now
+                    }
                     toBottom()
                 }
-                setStatus("● AXIOM pronta • resposta local")
+                setStatus("● AXIOM pronta • conversa salva")
             } catch (_: CancellationException) {
-                setStatus("Geração interrompida.")
+                setStatus("Geração interrompida • texto salvo")
             } catch (e: Exception) {
                 setStatus("Falha ao responder: ${e.message}")
                 if (generated.isEmpty()) out.text = "Não consegui responder: ${e.message}"
             } finally {
                 if (generated.isNotEmpty()) {
+                    if (answerId < 0L) answerId = store.addMessage(thread, "assistant", generated.toString())
+                    else store.updateMessage(answerId, generated.toString())
                     history.add(Message("assistant", generated.toString().trim()))
-                    saveHistory()
-                } else {
-                    saveHistory()
                 }
                 stop.visibility = View.GONE
                 send.visibility = View.VISIBLE
                 setBusy(false)
             }
-        }
-    }
-
-    private fun saveHistory() {
-        val json = JSONArray()
-        history.takeLast(36).forEach {
-            json.put(JSONObject().put("role", it.role).put("content", it.content))
-        }
-        prefs.edit().putString("conversation", json.toString()).apply()
-    }
-
-    private fun restoreHistory() {
-        try {
-            val saved = JSONArray(prefs.getString("conversation", "[]") ?: "[]")
-            for (i in 0 until saved.length()) {
-                val item = saved.getJSONObject(i)
-                val role = item.optString("role")
-                val text = item.optString("content")
-                if (role in listOf("user", "assistant") && text.isNotBlank()) {
-                    history.add(Message(role, text))
-                    bubble(text, role)
-                }
-            }
-        } catch (_: Exception) {
-            history.clear()
         }
     }
 

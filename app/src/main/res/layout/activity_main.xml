@@ -2,23 +2,28 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#080E20"
+    android:background="#0D1016"
     android:orientation="vertical"
-    android:paddingStart="16dp"
-    android:paddingEnd="16dp">
+    android:paddingStart="14dp"
+    android:paddingEnd="14dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
-        android:paddingTop="16dp"
-        android:paddingBottom="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="6dp"
         android:orientation="horizontal">
-        <ImageView
+        <TextView
+            android:id="@+id/btnHistory"
             android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:contentDescription="AXIOM"
-            android:src="@drawable/ic_axiom" />
+            android:layout_height="52dp"
+            android:gravity="center"
+            android:contentDescription="Histórico de conversas"
+            android:text="☰"
+            android:textColor="#EBEFF5"
+            android:textSize="25sp"
+            android:fontFamily="sans" />
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -29,53 +34,75 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="AXIOM"
-                android:textColor="#FFFFFF"
+                android:fontFamily="sans"
                 android:textStyle="bold"
-                android:textSize="23sp" />
+                android:textColor="#F3F5F8"
+                android:textSize="19sp" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="IA local • sem mensalidade"
-                android:textColor="#91A7C9"
-                android:textSize="11sp" />
+                android:text="Assistente local"
+                android:fontFamily="sans"
+                android:textColor="#A1A9B6"
+                android:textSize="12sp" />
         </LinearLayout>
-        <Button
+        <TextView
+            android:id="@+id/btnNew"
+            android:layout_width="44dp"
+            android:layout_height="52dp"
+            android:gravity="center"
+            android:contentDescription="Nova conversa"
+            android:text="＋"
+            android:fontFamily="sans"
+            android:textColor="#F3F5F8"
+            android:textSize="29sp"/>
+        <TextView
             android:id="@+id/btnSettings"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Modelo"
-            android:textAllCaps="false"
-            android:textColor="#03141A"
-            android:backgroundTint="#31D9E8" />
+            android:layout_width="44dp"
+            android:layout_height="52dp"
+            android:gravity="center"
+            android:contentDescription="Configurações de modelo"
+            android:text="⚙"
+            android:fontFamily="sans"
+            android:textColor="#AAB7C6"
+            android:textSize="24sp"/>
     </LinearLayout>
 
     <TextView
         android:id="@+id/tvStatus"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Preparando a AXIOM…"
-        android:textColor="#A9BDD7"
-        android:textSize="12sp"
-        android:paddingBottom="8dp" />
+        android:fontFamily="sans"
+        android:text="Inicializando…"
+        android:textColor="#80C6CA"
+        android:background="#171E26"
+        android:paddingStart="12dp"
+        android:paddingTop="7dp"
+        android:paddingBottom="7dp"
+        android:paddingEnd="12dp"
+        android:textSize="11sp" />
 
     <LinearLayout
         android:id="@+id/modelPanel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#142440"
+        android:background="#1C2533"
         android:padding="12dp"
+        android:layout_marginTop="8dp"
         android:orientation="vertical">
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Cérebro da AXIOM"
+            android:fontFamily="sans"
+            android:text="Modelo local"
             android:textStyle="bold"
-            android:textSize="17sp"
+            android:textSize="16sp"
             android:textColor="#FFFFFF" />
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Baixe o Qwen2.5 0.5B (~398 MB) uma vez. Depois, converse offline. Recomendo Wi-Fi e ao menos 1 GB livre. Também pode importar outro GGUF compatível."
+            android:fontFamily="sans"
+            android:text="Baixe o Qwen2.5 0.5B (~398 MB) uma vez ou importe um GGUF. Depois, a IA funciona sem conexão."
             android:textColor="#BDCCE2"
             android:paddingTop="5dp"
             android:paddingBottom="6dp"
@@ -90,15 +117,17 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:text="Baixar IA"
+                android:fontFamily="sans"
                 android:textAllCaps="false"
-                android:backgroundTint="#31D9E8"
-                android:textColor="#081125" />
+                android:backgroundTint="#42C9BC"
+                android:textColor="#0D1016" />
             <Button
                 android:id="@+id/btnImport"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginStart="8dp"
+                android:fontFamily="sans"
                 android:text="Importar GGUF"
                 android:textAllCaps="false"
                 android:backgroundTint="#3F5175"
@@ -123,15 +152,16 @@
             android:id="@+id/chatContainer"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingTop="14dp"
-            android:paddingBottom="12dp"
+            android:paddingTop="20dp"
+            android:paddingBottom="14dp"
             android:orientation="vertical"/>
     </ScrollView>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingBottom="14dp"
+        android:background="#1E232B"
+        android:padding="7dp"
         android:orientation="horizontal"
         android:gravity="center_vertical">
         <EditText
@@ -139,43 +169,53 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:maxLines="4"
-            android:minHeight="50dp"
-            android:hint="Pergunte à AXIOM..."
+            android:minHeight="48dp"
+            android:maxLines="5"
+            android:hint="Mensagem para AXIOM"
+            android:fontFamily="sans"
             android:inputType="textCapSentences|textMultiLine"
-            android:backgroundTint="#31D9E8"
-            android:textColor="#FFFFFF"
-            android:textColorHint="#788EAD"
+            android:background="@android:color/transparent"
+            android:paddingStart="10dp"
+            android:paddingEnd="6dp"
+            android:textColor="#F4F5F6"
+            android:textColorHint="#A1A8B3"
             android:textSize="15sp"/>
         <Button
             android:id="@+id/btnSend"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:text="Enviar"
+            android:layout_height="48dp"
+            android:text="↑"
+            android:fontFamily="sans"
+            android:contentDescription="Enviar mensagem"
             android:enabled="false"
+            android:textSize="22sp"
+            android:minWidth="48dp"
             android:textAllCaps="false"
-            android:backgroundTint="#31D9E8"
-            android:textColor="#061425"/>
+            android:backgroundTint="#42C9BC"
+            android:textColor="#0D1016"/>
         <Button
             android:id="@+id/btnStop"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:text="Parar"
+            android:layout_height="48dp"
+            android:text="■"
+            android:fontFamily="sans"
+            android:minWidth="48dp"
+            android:contentDescription="Interromper resposta"
             android:visibility="gone"
             android:textAllCaps="false"
-            android:backgroundTint="#F0BA66"
-            android:textColor="#061425"/>
+            android:backgroundTint="#EBC06F"
+            android:textColor="#0D1016"/>
     </LinearLayout>
 
     <TextView
-        android:id="@+id/btnClear"
+        android:id="@+id/tvFooter"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Limpar conversa"
+        android:text="Respostas podem conter erros · Conversas salvas no aparelho"
+        android:textColor="#828A97"
+        android:fontFamily="sans"
         android:gravity="center"
-        android:paddingBottom="10dp"
-        android:textColor="#95A6C7"
-        android:textSize="12sp"/>
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:textSize="10sp"/>
 </LinearLayout>

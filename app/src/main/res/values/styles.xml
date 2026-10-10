@@ -2,7 +2,7 @@
     <style name="AxiomTheme" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">#31D9E8</item>
-        <item name="android:statusBarColor">#080E20</item>
+        <item name="android:statusBarColor">#0D1016</item>
         <item name="android:navigationBarColor">#080E20</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowActionModeOverlay">true</item>

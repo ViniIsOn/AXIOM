@@ -22,23 +22,28 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+      - name: Reuse test signing key across future builds
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: axiom-experimental-debug-signing-v02
       - name: Build APK
         run: gradle :app:assembleDebug --no-daemon --stacktrace
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: AXIOM-AI-Android-v0.1
+          name: AXIOM-AI-Android-v0.2
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Publish APK in GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: axiom-android-v0.1
-          name: AXIOM AI Android v0.1 (experimental)
+          tag_name: axiom-android-v0.2
+          name: AXIOM AI Android v0.2 (experimental)
           prerelease: true
           make_latest: false
           body: |
             APK de testes com IA local Qwen2.5 0.5B.
-            O modelo GGUF (~398 MB) é baixado na primeira execução.
+            Novos chats, histórico em SQLite, backup JSON e visual atualizado.\n            O modelo GGUF (~398 MB) é baixado na primeira instalação.
             A versão é experimental; ainda não foi testada em aparelho físico.
           files: app/build/outputs/apk/debug/app-debug.apk

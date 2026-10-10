@@ -4,6 +4,7 @@
     <application
         android:allowBackup="true"
         android:label="AXIOM AI"
+        android:icon="@drawable/ic_axiom"
         android:theme="@style/AxiomTheme"
         android:usesCleartextTraffic="false"
         android:largeHeap="true"
