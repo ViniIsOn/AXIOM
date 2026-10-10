@@ -310,20 +310,24 @@ class MainActivity : ComponentActivity() {
         generation = lifecycleScope.launch {
             try {
                 val turns = history.takeLast(6)
-                val json = JSONArray()
-                json.put(JSONObject().put("role", "system").put(
-                    "content", "Você é AXIOM AI, uma assistente local em português brasileiro. " +
-                        "Seja gentil, útil, objetiva e racional. Nunca finja acessar internet, " +
-                        "conhecer o presente ou executar ferramentas. Admita incerteza. " +
-                        "Não peça dados sensíveis."
-                ))
-                for (item in turns) {
-                    json.put(JSONObject().put("role", item.role).put("content", item.content.takeLast(1200)))
+                // Qwen2.5 Instruct usa ChatML. A versão Maven 0.1.0 do motor
+                // ainda não inclui applyChatTemplate(), por isso montamos
+                // o prompt explicitamente em vez de depender de API futura.
+                val prompt = buildString {
+                    append("<|im_start|>system\n")
+                    append("Você é AXIOM AI, uma assistente local em português brasileiro. ")
+                    append("Seja gentil, útil, objetiva e racional. ")
+                    append("Não invente acesso à internet ou a ferramentas. Admita incerteza.")
+                    append("<|im_end|>\n")
+                    for (item in turns) {
+                        append("<|im_start|>")
+                        append(item.role)
+                        append("\n")
+                        append(item.content.takeLast(1000))
+                        append("<|im_end|>\n")
+                    }
+                    append("<|im_start|>assistant\n")
                 }
-                val prompt = withContext(Dispatchers.Default) {
-                    activeModel.applyChatTemplate(json.toString(), true)
-                }
-                if (prompt.isBlank()) error("Não foi possível aplicar o template de conversa.")
                 activeModel.generateStream(prompt).collect { chunk ->
                     generated.append(chunk)
                     out.text = generated.toString()
