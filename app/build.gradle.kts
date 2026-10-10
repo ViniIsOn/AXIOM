@@ -4,7 +4,7 @@ plugins {
 }
 android {
     namespace = "com.viniison.axiom"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {
         applicationId = "com.viniison.axiom"
         minSdk = 26
