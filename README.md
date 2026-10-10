@@ -1,43 +1,39 @@
-# AXIOM AI — Android 0.2.0
+# AXIOM AI — Android 0.3.0
 
-Assistente de IA independente para Android, com motor llama.cpp e modelo Qwen2.5-0.5B-Instruct local em GGUF. **Não usa API paga.** O modelo deve ser baixado pela primeira vez (~398 MB). Depois funciona offline.
+App Android experimental com inferência local real via llama.cpp e sem cobrança de API. **Conserva dados do app v0.2 ao instalar por cima com assinatura compatível.** Não desinstale a versão anterior.
 
-## Novidades da versão 0.2
+## Funções
 
-- Chat escuro redesenhado com fonte sans-serif, cabeçalho compacto e respostas separadas por autor.
-- Histórico **persistente no SQLite** do próprio app; botão ☰ alterna entre conversas, botão ＋ inicia outra.
-- Salva mensagens ao enviar, respostas durante a geração (em intervalos) e ao concluir.
-- Cada chat recebe um título automático, com opção de limpar ou excluir.
-- Rascunhos por conversa em SharedPreferences, salvos enquanto você digita.
-- Migrador do histórico antigo `conversation` da v0.1, **quando a atualização preserva os dados do Android**.
-- Backup manual em JSON: ☰ → Opções → Exportar backup; para restaurar, Importar backup.
-- Toque e segure uma resposta para copiá-la.
-- Preserva o `applicationId=com.viniison.axiom`, caminho do modelo GGUF e configurações já existentes.
+- **Modelos**: Qwen2.5-0.5B Instruct Q4_K_M (398 MB, leve e já instalado em v0.2); opção de baixar **Qwen2.5-1.5B Instruct Q4_K_M** (~986 MB, maior, normalmente mais capaz). O Qwen1.5B pode consumir mais de 2 GB de RAM e rodar lentamente. Ambos podem errar.
+- **Esforço Alto**: gera um primeiro rascunho e revisa a resposta em uma segunda inferência. É mais lento; não garante precisão.
+- **Anexos**: "+" antes da caixa de texto. Textos: txt, md, csv, json, xml e código em texto (primeiros 12 KB). PDF: OCR apenas da primeira página. Fotos: classificação de imagem + OCR local com ML Kit. O modelo GGUF atual é textual: **não recebe nem entende diretamente pixels das fotos, áudio ou páginas inteiras**. Máximo 3 anexos por mensagem.
+- **Ditado 🎙**: usa serviço de reconhecimento de voz presente no Android. Pode exigir rede e serviço/idioma compatível; nenhuma gravação é armazenada pela AXIOM.
+- **Pesquisa Wikipédia**: habilite plugin ⌘ → Pesquisa Wikipédia; depois alterne Wiki OFF/ON. Mostra resumos e URLs de fontes. Só a busca exige internet. O assistente não tem acesso geral à web.
+- **Pesquisa ↗**: abre pesquisa do Google no navegador externo; não lê as páginas automaticamente.
+- **Plugins ⌘**: Wikipédia, Calculadora local (`/calc 12*(3+2)`) e navegador; liga/desliga cada um. Interface inicial, sem instalação de plugins de terceiros.
+- Histórico SQLite, chats separados, migração v0.1→v0.2, backup JSON, rascunhos e cópia de respostas são preservados.
 
-## Instalação no celular
+## Instalar no Moto G24 Power
 
-1. Abra [Releases](https://github.com/ViniIsOn/AXIOM/releases) e baixe o APK da versão **0.2**.
-2. Tente instalar por cima da v0.1, **sem desinstalar primeiro**. Se o Android informar "app não instalado", veja o aviso de assinatura abaixo.
-3. Abra o app e confira se o histórico e o modelo estão acessíveis. Se for a primeira instalação, use Modelo → Baixar IA.
+1. Abra [Releases](https://github.com/ViniIsOn/AXIOM/releases) e baixe `app-debug.apk` da versão v0.3.
+2. **Instale por cima da versão existente; não desinstale.** O `applicationId` continua `com.viniison.axiom`.
+3. Se o Android recusar por diferença de assinatura, mantenha a v0.2: desinstalar apagará banco de dados e modelo. A assinatura debug fica em cache GitHub Actions para permitir atualizações dentro do mesmo cache; não é solução de longo prazo.
+4. Ao abrir, seu modelo existente deve carregar sem baixar novamente; backups continuam em ☰ → Opções.
+5. Toque na engrenagem para escolher outro modelo (opcional).
+6. Teste separadamente anexos, áudio e plugins; algumas funções dependem de componentes do Android e de conexão ativa.
 
-### ATENÇÃO: assinatura de APK de teste
+## Detalhes técnicos
 
-A versão v0.1 foi criada com uma chave debug gerada pelo GitHub Actions, que pode **não ser a mesma da v0.2**. Isso impede instalação por cima e NÃO é um problema do código. Neste caso, **não desinstale** se quer manter dados da v0.1: esse app não tinha exportação de histórico. Desinstalar apaga o histórico privado e o GGUF, exigindo novo download.
+- Kotlin/XML nativo, AndroidX, SQLiteOpenHelper; `applicationId com.viniison.axiom`, targetSdk 35.
+- Qwen2.5 1.5B GGUF: [bartowski/Qwen2.5-1.5B-Instruct-GGUF](https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF).
+- Reconhecimento de imagens/texto: [Google ML Kit](https://developers.google.com/ml-kit/vision).
+- Pesquisa: [Wikipédia MediaWiki API](https://www.mediawiki.org/wiki/API:Main_page).
+- Repositório público **não armazena conversas nem chaves de API**. Textos de conversa e extrações de anexos ficam na base SQLite do aparelho; backups exportados devem ser guardados com privacidade.
 
-A partir da v0.2 a automação usa cache do debug.keystore de testes para tentar manter a mesma assinatura nas próximas compilacões. **Cache pode expirar ou ser removido**, portanto não é garantia de atualização. Antes de atualizações futuras, exporte backups de conversa. Para distribuição estável, configurar uma chave de assinatura privada no GitHub Actions Secrets (não publique chave privada no repositório).
+## Limitações e testes
 
-O arquivo JSON não inclui os pesos GGUF nem senhas. Guarde-o em lugar privado: contém o texto das conversas.
-
-## Tecnologias
-
-Android nativo/Kotlin/XML, SQLiteOpenHelper, [llama-kotlin-android](https://github.com/CodeShipping/llama-kotlin-android) e [GGUF Qwen2.5-0.5B-Instruct](https://huggingface.co/bartowski/Qwen2.5-0.5B-Instruct-GGUF).
-
-### Limitações
-
-- Modelo pequeno: pode errar ou demorar para responder.
-- Sem pesquisa na web ou ferramentas externas nesta versão.
-- Histórico completo fica salvo no aparelho, mas **apenas as mensagens recentes entram no contexto enviado ao modelo**, para limitar RAM.
-- A importação de backup aceita arquivos JSON de até 4 MB, no máximo 300 conversas e 3 mil mensagens por conversa.
-- APK debug de testes, não release pronto para Play Store.
-
-Fonte e créditos no repositório.
+- APK de debug para teste, não pronto para Play Store.
+- Compilação CI não substitui teste no dispositivo real.
+- Wiki fornece busca enciclopédica, não uma busca geral de lojas, vagas ou serviços locais.
+- Abrir uma foto não habilita reconhecimento completo de cenas: o app fornece rótulos aproximados e texto OCR ao modelo de linguagem.
+- Modo alto tem duas passadas de geração. Não é garantia de raciocínio perfeito, e o celular pode esquentar/ficar lento.

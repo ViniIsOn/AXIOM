@@ -57,6 +57,16 @@
             android:textColor="#F3F5F8"
             android:textSize="29sp"/>
         <TextView
+            android:id="@+id/btnPlugins"
+            android:layout_width="42dp"
+            android:layout_height="52dp"
+            android:gravity="center"
+            android:contentDescription="Plugins da AXIOM"
+            android:text="⌘"
+            android:fontFamily="sans"
+            android:textColor="#75DAC9"
+            android:textSize="26sp"/>
+        <TextView
             android:id="@+id/btnSettings"
             android:layout_width="44dp"
             android:layout_height="52dp"
@@ -102,7 +112,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:fontFamily="sans"
-            android:text="Baixe o Qwen2.5 0.5B (~398 MB) uma vez ou importe um GGUF. Depois, a IA funciona sem conexão."
+            android:text="Use o Qwen 0.5B rápido (~398 MB) ou o Qwen 1.5B mais capaz (~986 MB), conforme a memória livre do aparelho."
             android:textColor="#BDCCE2"
             android:paddingTop="5dp"
             android:paddingBottom="6dp"
@@ -133,6 +143,16 @@
                 android:backgroundTint="#3F5175"
                 android:textColor="#FFFFFF"/>
         </LinearLayout>
+
+        <Button
+            android:id="@+id/btnSmartModel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Baixar Qwen 1.5B (mais inteligente)"
+            android:fontFamily="sans"
+            android:textAllCaps="false"
+            android:backgroundTint="#355C66"
+            android:textColor="#FFFFFF"/>
         <ProgressBar
             android:id="@+id/progressModel"
             style="?android:attr/progressBarStyleHorizontal"
@@ -156,6 +176,80 @@
             android:paddingBottom="14dp"
             android:orientation="vertical"/>
     </ScrollView>
+
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingTop="7dp"
+        android:paddingBottom="7dp">
+        <TextView
+            android:id="@+id/btnAttach"
+            android:layout_width="44dp"
+            android:layout_height="43dp"
+            android:text="＋"
+            android:contentDescription="Anexar imagem ou arquivo"
+            android:gravity="center"
+            android:fontFamily="sans"
+            android:textColor="#F4F5F6"
+            android:textSize="25sp"/>
+        <TextView
+            android:id="@+id/btnMic"
+            android:layout_width="44dp"
+            android:layout_height="43dp"
+            android:text="🎙"
+            android:contentDescription="Ditado por voz"
+            android:gravity="center"
+            android:fontFamily="sans"
+            android:textColor="#F4F5F6"
+            android:textSize="21sp"/>
+        <TextView
+            android:id="@+id/btnEffort"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="43dp"
+            android:text="Esforço: Normal"
+            android:contentDescription="Alternar modo de esforço da IA"
+            android:gravity="center"
+            android:fontFamily="sans"
+            android:textColor="#DCE8EE"
+            android:textSize="12sp"/>
+        <TextView
+            android:id="@+id/btnSearch"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="43dp"
+            android:text="Pesquisa: OFF"
+            android:contentDescription="Ativar pesquisa Wikipédia"
+            android:gravity="center"
+            android:fontFamily="sans"
+            android:textColor="#DCE8EE"
+            android:textSize="12sp"/>
+        <TextView
+            android:id="@+id/btnBrowser"
+            android:layout_width="38dp"
+            android:layout_height="43dp"
+            android:text="↗"
+            android:contentDescription="Abrir pesquisa web no navegador"
+            android:gravity="center"
+            android:fontFamily="sans"
+            android:textColor="#75DAC9"
+            android:textSize="24sp"/>
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvAttachment"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="#1C2731"
+        android:textColor="#C5E8E3"
+        android:fontFamily="sans"
+        android:padding="9dp"
+        android:textSize="12sp"
+        android:visibility="gone"
+        android:text="Anexo"/>
 
     <LinearLayout
         android:layout_width="match_parent"
