@@ -1,6 +1,9 @@
 package com.viniison.axiom
 
 import android.app.AlertDialog
+import android.app.ActivityManager
+import android.widget.ImageView
+import android.text.InputType
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ActivityNotFoundException
@@ -75,6 +78,9 @@ class MainActivity : ComponentActivity() {
     private val wikiPlugin = AxiomWikiPlugin()
     private val calculatorPlugin = AxiomCalculatorPlugin()
     private val browserPlugin = AxiomWebPlugin()
+    private val githubPlugin = AxiomGithubPublicPlugin()
+    private val commons = AxiomCommonsSearch()
+    private val pendingImages = mutableListOf<String>()
     private val history = mutableListOf<Message>()
     private val store by lazy { ChatStore(this) }
     private var currentChatId = -1L
@@ -177,6 +183,7 @@ class MainActivity : ComponentActivity() {
         attachmentLabel.setOnClickListener {
             if (!busy && !attachmentBusy) {
                 attachments.clear()
+                pendingImages.clear()
                 updateAttachments()
             }
         }
@@ -197,6 +204,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         findViewById<TextView>(R.id.btnBrowser).setOnClickListener { openBrowserSearch() }
+        findViewById<TextView>(R.id.btnImages).setOnClickListener { chooseImageSearch() }
         import.setOnClickListener { if (!busy) pickModel.launch(arrayOf("*/*")) }
         send.setOnClickListener { sendMessage() }
         stop.setOnClickListener {
@@ -220,9 +228,13 @@ class MainActivity : ComponentActivity() {
         })
 
         val savedPath = prefs.getString("model_path", null)
-        if (savedPath != null && File(savedPath).exists()) {
+        val safePath = if (savedPath?.contains("1.5b") == true) {
+            setStatus("Modo seguro: modelo pesado requer ativação manual. O leve será usado quando disponível.")
+            modelFile().takeIf { it.isFile }?.absolutePath
+        } else savedPath
+        if (safePath != null && File(safePath).exists()) {
             panel.visibility = View.GONE
-            loadModel(File(savedPath))
+            loadModel(File(safePath))
         } else {
             panel.visibility = View.VISIBLE
             setStatus("Configure o modelo local para iniciar.")
@@ -243,8 +255,11 @@ class MainActivity : ComponentActivity() {
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
-    private fun bubble(content: String, role: String): TextView {
+    private fun bubble(content: String, role: String, messageId: Long? = null): TextView {
         val mine = role == "user"
+        val imageMarker = Regex("\\[\\[axiom-image:([a-f0-9-]{36}\\.jpg)\\]\\]")
+        val imageNames = imageMarker.findAll(content).map { it.groupValues[1] }.toList()
+        val visibleContent = content.replace(imageMarker, "").trim()
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = if (mine) Gravity.END else Gravity.START
@@ -263,7 +278,7 @@ class MainActivity : ComponentActivity() {
         }
 
         val text = TextView(this).apply {
-            this.text = if (content.length > 3000) content.take(3000) + "\\n[Texto completo preservado no histórico]" else content
+            this.text = if (visibleContent.length > 3000) visibleContent.take(3000) + "\n[Texto completo preservado no histórico]" else visibleContent
             if (content.contains("https://")) {
                 autoLinkMask = Linkify.WEB_URLS
                 movementMethod = LinkMovementMethod.getInstance()
@@ -289,10 +304,34 @@ class MainActivity : ComponentActivity() {
             LinearLayout.LayoutParams.WRAP_CONTENT
         ))
         text.setOnLongClickListener {
-            val clip = ClipData.newPlainText("AXIOM", text.text)
-            (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
-            Toast.makeText(this, "Texto copiado", Toast.LENGTH_SHORT).show()
+            if (mine && messageId != null) {
+                showEditMessage(messageId, content)
+            } else {
+                val clip = ClipData.newPlainText("AXIOM", text.text)
+                (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
+                Toast.makeText(this, "Texto copiado", Toast.LENGTH_SHORT).show()
+            }
             true
+        }
+        for (name in imageNames) {
+            val bitmap = AxiomImageVault.thumbnail(this, name) ?: continue
+            val image = ImageView(this).apply {
+                setImageBitmap(bitmap)
+                adjustViewBounds = true
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                contentDescription = "Imagem enviada na conversa"
+                maxHeight = dp(260)
+                setOnClickListener {
+                    val full = AxiomImageVault.thumbnail(this@MainActivity, name)
+                    if (full != null) AlertDialog.Builder(this@MainActivity)
+                        .setView(ImageView(this@MainActivity).apply {
+                            setImageBitmap(full)
+                            adjustViewBounds = true
+                            setPadding(dp(8),dp(8),dp(8),dp(8))
+                        }).setPositiveButton("Fechar", null).show()
+                }
+            }
+            row.addView(image, LinearLayout.LayoutParams(dp(235), dp(170)))
         }
         messagesView.addView(row)
         row.alpha = 0f
@@ -310,11 +349,42 @@ class MainActivity : ComponentActivity() {
         messagesView.removeAllViews()
         store.messages(id).forEach {
             history.add(Message(it.role, it.content))
-            bubble(it.content, it.role)
+            bubble(it.content, it.role, if (it.role == "user") it.id else null)
         }
         if (history.isEmpty()) welcome()
         input.setText(prefs.getString("draft_$id", "") ?: "")
         toBottom()
+    }
+
+    private fun showEditMessage(messageId: Long, original: String) {
+        if (busy || attachmentBusy) return
+        val marker = original.indexOf("\n\n[Anexo:")
+        val preserved = if (marker >= 0) original.substring(marker) else ""
+        val raw = if (marker >= 0) original.substring(0, marker) else original
+        val oldText = raw.replace(Regex("\\[\\[axiom-image:[a-f0-9-]{36}\\.jpg\\]\\]"), "").trim()
+        val field = EditText(this).apply {
+            setText(oldText)
+            setSelection(text.length)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 2
+            maxLines = 10
+            setPadding(dp(22),dp(15),dp(22),dp(15))
+        }
+        AlertDialog.Builder(this).setTitle("Editar sua mensagem")
+            .setMessage("As respostas antigas permanecem no histórico e não são recriadas automaticamente.")
+            .setView(field)
+            .setPositiveButton("Salvar") { _, _ ->
+                val corrected = field.text.toString().trim()
+                if (corrected.isNotBlank()) {
+                    val imgMarkers = Regex("\\[\\[axiom-image:[a-f0-9-]{36}\\.jpg\\]\\]")
+                        .findAll(original).joinToString("") { "\n" + it.value }
+                    if (store.editUserMessage(currentChatId, messageId, corrected + preserved + imgMarkers)) {
+                        openChat(currentChatId)
+                        setStatus("Mensagem editada. Respostas anteriores não foram regeneradas.")
+                    }
+                }
+            }
+            .setNegativeButton("Cancelar", null).show()
     }
 
     private fun newChat() {
@@ -401,7 +471,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun showPlugins() {
-        val plugins: List<AxiomPlugin> = listOf(wikiPlugin, calculatorPlugin, browserPlugin)
+        val plugins: List<AxiomPlugin> = listOf(wikiPlugin, calculatorPlugin, browserPlugin, githubPlugin)
         val enabled = plugins.map { prefs.getBoolean("plugin_" + it.id, it.id != "wiki") }.toBooleanArray()
         AlertDialog.Builder(this).setTitle("Plugins locais da AXIOM")
             .setMultiChoiceItems(plugins.map { it.title + " — " + it.description }.toTypedArray(), enabled) { _, index, checked ->
@@ -413,8 +483,95 @@ class MainActivity : ComponentActivity() {
                 refreshOptions()
             }
             .setPositiveButton("Concluir", null)
-            .setMessage("Ative somente o necessário. Pesquisa usa internet; calculadora é offline.")
-            .show()
+            .setNeutralButton("Codex / Work") { _, _ -> showOfficialServices() }
+                        .show()
+    }
+
+    private fun showOfficialServices() {
+        AlertDialog.Builder(this)
+            .setTitle("Serviços oficiais")
+            .setMessage("Codex e ChatGPT Work não são executados dentro da AXIOM. Abrir o ChatGPT não concede acesso ao seu notebook. O uso remoto de um computador depende da configuração e das permissões do serviço oficial.")
+            .setPositiveButton("Abrir ChatGPT") { _, _ -> openExternal("https://chatgpt.com/") }
+            .setNeutralButton("Ver repositório AXIOM") { _, _ ->
+                openExternal("https://github.com/ViniIsOn/AXIOM")
+            }
+            .setNegativeButton("Fechar", null).show()
+    }
+
+    private fun openExternal(url: String) {
+        try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+        catch (_: Exception) { setStatus("Não foi possível abrir o navegador.") }
+    }
+
+    private fun chooseImageSearch() {
+        val term = input.text.toString().trim().ifBlank {
+            history.lastOrNull { it.role == "user" }?.content?.take(80) ?: ""
+        }
+        if (term.isBlank()) {
+            setStatus("Digite o que deseja buscar nas imagens, por exemplo: husky siberiano.")
+            return
+        }
+        AlertDialog.Builder(this).setTitle("Pesquisar imagens")
+            .setItems(arrayOf("Mostrar imagens do Wikimedia Commons aqui",
+                "Google Imagens no navegador")) { _, selection ->
+                if (selection == 0) showCommonsImages(term)
+                else openExternal("https://www.google.com/search?tbm=isch&q=" +
+                    URLEncoder.encode(term.take(120), "UTF-8"))
+            }.setNegativeButton("Cancelar", null).show()
+    }
+
+    private fun showCommonsImages(query: String) {
+        if (busy || attachmentBusy) return
+        setStatus("Pesquisando imagens licenciadas no Wikimedia Commons…")
+        lifecycleScope.launch {
+            try {
+                val found = commons.search(query)
+                if (found.isEmpty()) {
+                    setStatus("Nenhuma imagem encontrada no Commons; tente Google Imagens.")
+                    return@launch
+                }
+                val saved = "Imagens do Wikimedia Commons para: " + query + "\n" +
+                    found.joinToString("\n") { it.title + ": " + it.source }
+                store.addMessage(currentChatId, "assistant", saved)
+                history.add(Message("assistant", saved))
+                val title = TextView(this@MainActivity).apply {
+                    text = "▧  Imagens: " + query
+                    setTextColor(Color.parseColor("#75DAC9"))
+                    textSize = 14f
+                    setPadding(dp(8), dp(14), dp(8), dp(8))
+                }
+                messagesView.addView(title)
+                for (item in found) {
+                    val holder = LinearLayout(this@MainActivity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        setPadding(dp(9), dp(6), dp(9), dp(8))
+                    }
+                    val label = TextView(this@MainActivity).apply {
+                        text = item.title.take(80) + "\nFonte: " + item.source
+                        textSize = 12f
+                        setTextColor(Color.parseColor("#AFCBDA"))
+                        autoLinkMask = Linkify.WEB_URLS
+                        movementMethod = LinkMovementMethod.getInstance()
+                    }
+                    val image = ImageView(this@MainActivity).apply {
+                        adjustViewBounds = true
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                        contentDescription = item.title
+                        setOnClickListener { openExternal(item.source) }
+                    }
+                    holder.addView(image, LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, dp(205)))
+                    holder.addView(label)
+                    messagesView.addView(holder)
+                    val picture = commons.loadBitmap(item.thumb)
+                    if (picture != null) image.setImageBitmap(picture)
+                    toBottom()
+                }
+                setStatus("Imagens com links das fontes • pesquisa online")
+            } catch (e: Exception) {
+                setStatus("Não foi possível buscar imagens: " + e.message)
+            }
+        }
     }
 
     private fun startDictation() {
@@ -457,6 +614,10 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 val result = AxiomAttachmentReader(this@MainActivity).read(uri)
+                if (result.kind == "imagem") {
+                    val filename = AxiomImageVault.save(this@MainActivity, uri)
+                    pendingImages.add(filename)
+                }
                 attachments.add(result)
                 updateAttachments()
                 setStatus(if (result.kind == "imagem") "Imagem lida por OCR e rótulos (visão limitada)."
@@ -613,21 +774,35 @@ class MainActivity : ComponentActivity() {
         setStatus("Carregando IA na memória… pode levar alguns segundos.")
         lifecycleScope.launch {
             try {
+                val heavy = file.name.contains("1.5b")
+                if (heavy) {
+                    val memory = ActivityManager.MemoryInfo()
+                    (getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(memory)
+                    if (memory.availMem < 1_350_000_000L || memory.lowMemory) {
+                        setStatus("Memória disponível insuficiente para modelo 1.5B agora. Feche outros apps ou use o 0.5B.")
+                        return@launch
+                    }
+                }
                 val previous = model
                 model = null
                 withContext(Dispatchers.Default) { previous?.close() }
                 val loaded = LlamaModel.load(file.absolutePath) {
-                    contextSize = 2048
-                    batchSize = 256
-                    threads = 4
-                    temperature = 0.55f
+                    contextSize = if (heavy) 768 else 1536
+                    batchSize = if (heavy) 32 else 128
+                    threads = if (heavy) 2 else 4
+                    temperature = 0.48f
                     topP = 0.9f
-                    maxTokens = if (file.name.contains("1.5b")) 480 else 280
+                    maxTokens = if (heavy) 160 else 280
                     gpuLayers = 0
                     useMmap = true
                 }
                 model = loaded
-                prefs.edit().putString("model_path", file.absolutePath).apply()
+                if (file.name.contains("1.5b")) {
+                    // O pesado é usado só nesta sessão. Não reabrir automaticamente após crash.
+                    val light = modelFile().takeIf { it.isFile }
+                    if (light != null) prefs.edit().putString("model_path", light.absolutePath).apply()
+                    else prefs.edit().remove("model_path").apply()
+                } else prefs.edit().putString("model_path", file.absolutePath).apply()
                 panel.visibility = View.GONE
                 setStatus("● AXIOM pronta • ${file.name} • processamento local")
             } catch (e: Throwable) {
@@ -643,6 +818,42 @@ class MainActivity : ComponentActivity() {
         val typed = input.text.toString().trim()
         if (typed.isBlank() && attachments.isEmpty()) return
         val message = typed.ifBlank { "O que é possível dizer sobre estes anexos?" }
+        if (typed.startsWith("/github ", ignoreCase = true) && attachments.isEmpty()) {
+            if (!prefs.getBoolean("plugin_github", false)) {
+                setStatus("Ative GitHub público no menu ⌘ antes de usar /github.")
+                return
+            }
+            val selector = typed.substringAfter(' ').trim()
+            val first = history.none { it.role == "user" }
+            if (first) { store.setTitle(currentChatId, typed); messagesView.removeAllViews() }
+            val userId = store.addMessage(currentChatId, "user", typed)
+            history.add(Message("user", typed))
+            bubble(typed, "user", userId)
+            input.text.clear()
+            setBusy(true)
+            lifecycleScope.launch {
+                try {
+                    setStatus("Consultando GitHub público…")
+                    val result = githubPlugin.inspect(selector)
+                    store.addMessage(currentChatId, "assistant", result)
+                    history.add(Message("assistant", result))
+                    bubble(result, "assistant")
+                    setStatus("● GitHub público consultado • sem alterações no repositório")
+                } catch (e: Exception) {
+                    setStatus("Falha no GitHub: " + e.message)
+                } finally { setBusy(false) }
+            }
+            return
+        }
+        if (typed.startsWith("/google ", ignoreCase = true) && attachments.isEmpty()) {
+            openExternal("https://www.google.com/search?q=" +
+                URLEncoder.encode(typed.substringAfter(' ').take(200), "UTF-8"))
+            return
+        }
+        if (typed.startsWith("/imagens ", ignoreCase = true) && attachments.isEmpty()) {
+            showCommonsImages(typed.substringAfter(' '))
+            return
+        }
         val thread = currentChatId
 
         if (message.startsWith("/calc ", ignoreCase = true) &&
@@ -668,22 +879,24 @@ class MainActivity : ComponentActivity() {
             return
         }
         val usedAttachments = attachments.toList()
-        val contextMessage = if (usedAttachments.isEmpty()) message else buildString {
+        val usedImageNames = pendingImages.toList()
+        val contextMessage = buildString {
             append(message)
             for (item in usedAttachments) {
                 append("\n\n[Anexo: "); append(item.name); append("; tipo "); append(item.kind)
                 append("]\n"); append(item.summary.take(1600))
             }
+            for (name in usedImageNames) append("\n[[axiom-image:" + name + "]]")
         }
 
         val isFirst = history.none { it.role == "user" }
         if (isFirst) store.setTitle(thread, message)
-        store.addMessage(thread, "user", contextMessage)
+        val userMessageId = store.addMessage(thread, "user", contextMessage)
         history.add(Message("user", contextMessage))
         if (isFirst) messagesView.removeAllViews()
-        bubble(if (usedAttachments.isEmpty()) message else message +
-            "\n📎 " + usedAttachments.joinToString(", ") { it.name }, "user")
+        bubble(contextMessage, "user", userMessageId)
         attachments.clear()
+        pendingImages.clear()
         updateAttachments()
         input.text.clear()
         val out = bubble("Preparando resposta…", "assistant")
@@ -725,12 +938,14 @@ class MainActivity : ComponentActivity() {
                         append("<|im_start|>")
                         append(item.role)
                         append("\n")
-                        append(item.content.take(if (index == turns.lastIndex) 2200 else 550))
+                        append(item.content.replace(Regex("\\[\\[axiom-image:[a-f0-9-]{36}\\.jpg\\]\\]"), "")
+                            .take(if (index == turns.lastIndex) 1200 else 450))
                         append("<|im_end|>\n")
                     }
                     append("<|im_start|>assistant\n")
                 }
-                val finalPrompt = if (highEffort) {
+                val heavy = activeModel.config.contextSize <= 768
+                val finalPrompt = if (highEffort && !heavy) {
                     setStatus("Modo alto: preparando primeira resposta…")
                     val initial = activeModel.generate(prompt).take(1700)
                     setStatus("Modo alto: verificando e corrigindo a resposta…")
@@ -740,7 +955,10 @@ class MainActivity : ComponentActivity() {
                         "e forneça apenas a versão final clara. Se houver incerteza, diga-a. " +
                         "Não finja conhecer fatos atuais sem fontes." +
                         "<|im_end|>\n<|im_start|>assistant\n"
-                } else prompt
+                } else {
+                    if (highEffort && heavy) setStatus("Modelo avançado em modo seguro: revisão dupla desativada para evitar travamento.")
+                    prompt
+                }
 
                 activeModel.generateStream(finalPrompt).collect { chunk ->
                     generated.append(chunk)

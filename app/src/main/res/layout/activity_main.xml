@@ -228,11 +228,21 @@
             android:textColor="#DCE8EE"
             android:textSize="12sp"/>
         <TextView
+            android:id="@+id/btnImages"
+            android:layout_width="44dp"
+            android:layout_height="43dp"
+            android:text="▧"
+            android:contentDescription="Pesquisar imagens Commons ou Google Imagens"
+            android:gravity="center"
+            android:fontFamily="sans"
+            android:textColor="#75DAC9"
+            android:textSize="24sp"/>
+        <TextView
             android:id="@+id/btnBrowser"
             android:layout_width="38dp"
             android:layout_height="43dp"
-            android:text="↗"
-            android:contentDescription="Abrir pesquisa web no navegador"
+            android:text="G"
+            android:contentDescription="Pesquisar no Google no navegador"
             android:gravity="center"
             android:fontFamily="sans"
             android:textColor="#75DAC9"

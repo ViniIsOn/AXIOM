@@ -1,39 +1,27 @@
-# AXIOM AI — Android 0.3.0
+# AXIOM AI Android 0.4 — experimental
 
-App Android experimental com inferência local real via llama.cpp e sem cobrança de API. **Conserva dados do app v0.2 ao instalar por cima com assinatura compatível.** Não desinstale a versão anterior.
+Atualização direta da AXIOM 0.3. Projeto nativo Kotlin/Android com modelo GGUF local, sem mensalidade de API. **Mesmo applicationId** \`com.viniison.axiom\`, mesmas preferências, histórico SQLite e caminho para modelos. Instale sem desinstalar.
 
-## Funções
+## Novidades
+- Toque e segure em uma **mensagem sua** para editar o texto salvo no SQLite. Respostas anteriores permanecem, mas **não são recalculadas** automaticamente.
+- **Imagens anexadas**: miniatura comprimida em \`filesDir/chat_images\`, exibida na conversa mesmo após fechar o app. A IA ainda processa **OCR e rótulos**; não recebe diretamente pixels.
+- **Buscar imagens** (▧): Wikimedia Commons com miniaturas dentro do app e links da origem; ou Google Imagens aberto no navegador. Comando \`/imagens husky siberiano\` abre galeria Commons.
+- **Google web** (G) ou \`/google pesquisa\`: pesquisa no navegador. Não são retornados resultados do Google ao modelo automaticamente; isso exigiria API e autorização próprias, respeitando as condições do provedor.
+- **GitHub público**: ative em ⌘ → GitHub público, depois envie \`/github ViniIsOn/AXIOM\`. Consulta descrição, linguagens e até três commits com API pública do GitHub. **Sem tokens, sem repositórios privados, sem alterações remotas.**
+- Menu ⌘ → Codex / Work: **abre o serviço oficial** com informação honesta, sem fingir integração. O Work na nuvem não herda acesso aos arquivos do seu notebook e a AXIOM não pode controlá-lo automaticamente.
+- **Estabilidade do Qwen 1.5B**: contexto 768, batch 32, 2 threads e máximo de 160 tokens; evita carregá-lo automaticamente ao reiniciar; desativa o ciclo duplo do Esforço Alto nele e checa a memória livre. Ainda **não há garantia** de não fechar em celulares com pouca RAM. Se falhar, volte ao 0.5B.
 
-- **Modelos**: Qwen2.5-0.5B Instruct Q4_K_M (398 MB, leve e já instalado em v0.2); opção de baixar **Qwen2.5-1.5B Instruct Q4_K_M** (~986 MB, maior, normalmente mais capaz). O Qwen1.5B pode consumir mais de 2 GB de RAM e rodar lentamente. Ambos podem errar.
-- **Esforço Alto**: gera um primeiro rascunho e revisa a resposta em uma segunda inferência. É mais lento; não garante precisão.
-- **Anexos**: "+" antes da caixa de texto. Textos: txt, md, csv, json, xml e código em texto (primeiros 12 KB). PDF: OCR apenas da primeira página. Fotos: classificação de imagem + OCR local com ML Kit. O modelo GGUF atual é textual: **não recebe nem entende diretamente pixels das fotos, áudio ou páginas inteiras**. Máximo 3 anexos por mensagem.
-- **Ditado 🎙**: usa serviço de reconhecimento de voz presente no Android. Pode exigir rede e serviço/idioma compatível; nenhuma gravação é armazenada pela AXIOM.
-- **Pesquisa Wikipédia**: habilite plugin ⌘ → Pesquisa Wikipédia; depois alterne Wiki OFF/ON. Mostra resumos e URLs de fontes. Só a busca exige internet. O assistente não tem acesso geral à web.
-- **Pesquisa ↗**: abre pesquisa do Google no navegador externo; não lê as páginas automaticamente.
-- **Plugins ⌘**: Wikipédia, Calculadora local (`/calc 12*(3+2)`) e navegador; liga/desliga cada um. Interface inicial, sem instalação de plugins de terceiros.
-- Histórico SQLite, chats separados, migração v0.1→v0.2, backup JSON, rascunhos e cópia de respostas são preservados.
+## Uso rápido
+1. [Releases AXIOM](https://github.com/ViniIsOn/AXIOM/releases) → APK 0.4 → instalar **por cima**, sem desinstalar.
+2. Faça backup das conversas em ☰ → Opções → Exportar.
+3. Teste uma imagem, pressione e segure uma mensagem para editar e abra ▧ para busca de imagens.
+4. Se a atualização for recusada por assinatura de debug, **não desinstale** a versão antiga: desinstalar pode apagar banco e modelos. O GitHub Actions usa cache de chave debug desde v0.2, mas a continuidade do cache não é garantida.
 
-## Instalar no Moto G24 Power
-
-1. Abra [Releases](https://github.com/ViniIsOn/AXIOM/releases) e baixe `app-debug.apk` da versão v0.3.
-2. **Instale por cima da versão existente; não desinstale.** O `applicationId` continua `com.viniison.axiom`.
-3. Se o Android recusar por diferença de assinatura, mantenha a v0.2: desinstalar apagará banco de dados e modelo. A assinatura debug fica em cache GitHub Actions para permitir atualizações dentro do mesmo cache; não é solução de longo prazo.
-4. Ao abrir, seu modelo existente deve carregar sem baixar novamente; backups continuam em ☰ → Opções.
-5. Toque na engrenagem para escolher outro modelo (opcional).
-6. Teste separadamente anexos, áudio e plugins; algumas funções dependem de componentes do Android e de conexão ativa.
-
-## Detalhes técnicos
-
-- Kotlin/XML nativo, AndroidX, SQLiteOpenHelper; `applicationId com.viniison.axiom`, targetSdk 35.
-- Qwen2.5 1.5B GGUF: [bartowski/Qwen2.5-1.5B-Instruct-GGUF](https://huggingface.co/bartowski/Qwen2.5-1.5B-Instruct-GGUF).
-- Reconhecimento de imagens/texto: [Google ML Kit](https://developers.google.com/ml-kit/vision).
-- Pesquisa: [Wikipédia MediaWiki API](https://www.mediawiki.org/wiki/API:Main_page).
-- Repositório público **não armazena conversas nem chaves de API**. Textos de conversa e extrações de anexos ficam na base SQLite do aparelho; backups exportados devem ser guardados com privacidade.
-
-## Limitações e testes
-
-- APK de debug para teste, não pronto para Play Store.
-- Compilação CI não substitui teste no dispositivo real.
-- Wiki fornece busca enciclopédica, não uma busca geral de lojas, vagas ou serviços locais.
-- Abrir uma foto não habilita reconhecimento completo de cenas: o app fornece rótulos aproximados e texto OCR ao modelo de linguagem.
-- Modo alto tem duas passadas de geração. Não é garantia de raciocínio perfeito, e o celular pode esquentar/ficar lento.
+## Limitações importantes
+- A edição preserva respostas já dadas: elas podem ficar desatualizadas.
+- O backup JSON exporta textos e referências locais, **não copia os arquivos binários de imagens nem os pesos GGUF**.
+- Google é aberto no navegador porque raspagem de resultados não foi implementada e uma API oficial pode exigir credenciais/custos.
+- GitHub funciona só em repositórios públicos e está sujeito ao limite de consultas anônimas. Para gravar em repositórios privados, futura implementação deve usar OAuth e confirmação granular, jamais token embutido no APK/repositório.
+- Codex/Work são produtos externos: atalhos não são execução de Codex, controle remoto, nem acesso a pastas de notebook.
+- O modelo 1.5B pode continuar lento ou consumir mais memória do que o dispositivo suporta. O carregamento no aparelho precisa ser testado.
+- PDF: OCR apenas na primeira página; imagens locais: classificação/OCR, não visão completa.

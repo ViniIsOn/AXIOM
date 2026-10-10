@@ -14,7 +14,7 @@ import org.json.JSONObject
  */
 class ChatStore(context: Context) : SQLiteOpenHelper(context, "axiom_chats.db", null, 1) {
     data class Thread(val id: Long, val title: String, val updatedAt: Long)
-    data class Entry(val role: String, val content: String)
+    data class Entry(val id: Long, val role: String, val content: String)
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE threads(id INTEGER PRIMARY KEY AUTOINCREMENT,title TEXT NOT NULL,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)")
@@ -56,8 +56,8 @@ class ChatStore(context: Context) : SQLiteOpenHelper(context, "axiom_chats.db", 
 
     fun messages(threadId: Long): List<Entry> {
         val result = mutableListOf<Entry>()
-        readableDatabase.rawQuery("SELECT role,content FROM messages WHERE thread_id=? ORDER BY id ASC", arrayOf(threadId.toString())).use { c ->
-            while (c.moveToNext()) result.add(Entry(c.getString(0), c.getString(1)))
+        readableDatabase.rawQuery("SELECT id,role,content FROM messages WHERE thread_id=? ORDER BY id ASC", arrayOf(threadId.toString())).use { c ->
+            while (c.moveToNext()) result.add(Entry(c.getLong(0), c.getString(1), c.getString(2)))
         }
         return result
     }
@@ -77,6 +77,21 @@ class ChatStore(context: Context) : SQLiteOpenHelper(context, "axiom_chats.db", 
     fun updateMessage(id: Long, content: String) {
         writableDatabase.update("messages", ContentValues().apply { put("content", content) },
             "id=?", arrayOf(id.toString()))
+    }
+
+    /** Edita a mensagem escolhida, preservando as respostas antigas como histórico. */
+    fun editUserMessage(threadId: Long, messageId: Long, newContent: String): Boolean {
+        val value = newContent.trim()
+        if (value.isBlank()) return false
+        val db = writableDatabase
+        val affected = db.update("messages", ContentValues().apply { put("content", value) },
+            "id=? AND thread_id=? AND role='user'",
+            arrayOf(messageId.toString(), threadId.toString()))
+        if (affected > 0) {
+            db.execSQL("UPDATE threads SET updated_at=? WHERE id=?",
+                arrayOf(System.currentTimeMillis(), threadId))
+        }
+        return affected > 0
     }
 
     fun setTitle(threadId: Long, text: String) {

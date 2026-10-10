@@ -32,18 +32,18 @@ jobs:
       - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: AXIOM-AI-Android-v0.3
+          name: AXIOM-AI-Android-v0.4
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Publish APK in GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: axiom-android-v0.3
-          name: AXIOM AI Android v0.3 (experimental)
+          tag_name: axiom-android-v0.4
+          name: AXIOM AI Android v0.4 (experimental)
           prerelease: true
           make_latest: false
           body: |
             APK de testes com IA local Qwen2.5 0.5B.
-            Anexos OCR/imagens/PDF, ditado, pesquisa Wikipédia, plugins, modo alto e Qwen 1.5B opcional.\n            O modelo GGUF (~398 MB) é baixado na primeira instalação.
+            Miniaturas salvas, edicao de mensagens, pesquisa de imagens Commons, Google e plugin GitHub publico.            O modelo GGUF (~398 MB) é baixado na primeira instalação.
             A versão é experimental; ainda não foi testada em aparelho físico.
           files: app/build/outputs/apk/debug/app-debug.apk
