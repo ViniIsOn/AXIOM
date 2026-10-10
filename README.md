@@ -25,3 +25,13 @@ Atualização direta da AXIOM 0.3. Projeto nativo Kotlin/Android com modelo GGUF
 - Codex/Work são produtos externos: atalhos não são execução de Codex, controle remoto, nem acesso a pastas de notebook.
 - O modelo 1.5B pode continuar lento ou consumir mais memória do que o dispositivo suporta. O carregamento no aparelho precisa ser testado.
 - PDF: OCR apenas na primeira página; imagens locais: classificação/OCR, não visão completa.
+
+
+## Correção experimental v0.4.1: travamento ao responder
+A execução do Qwen2.5 1.5B foi transferida para um **Service** Android separado (`android:process=":axiom_model"`), com contexto de 512 tokens, batch 16, 2 threads e 112 tokens gerados no máximo. Se o motor nativo falhar, o processo principal normalmente permanece vivo, com histórico SQLite intacto.
+
+O aplicativo não carregará automaticamente o modelo 1.5B após reinício. Ele continua disponível no botão Modelo → Baixar Qwen 1.5B (se já baixado, não baixa novamente). O modo Esforço Alto é desligado ao iniciar o app; recomenda-se manter em Normal, sobretudo no celular com RAM limitada.
+
+A geração grava um sinal de atividade em preferências; após reinicialização inesperada, o app mostra aviso de recuperação. Reenviar mensagem idêntica que ficou sem resposta não adiciona outra cópia ao histórico. **Não é garantido que o Android não feche o aplicativo em situações de falta global de memória**.
+
+Observação: a versão 0.4.1 deve ser instalada por cima da v0.4. Não desinstale, pois isso apaga o modelo e as conversas. Exporte backup em ☰ → Opções → Exportar backup antes de instalar. A build GitHub Actions valida compilação, não simula falta de RAM real no Moto G24 Power.

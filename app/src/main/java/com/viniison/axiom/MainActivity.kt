@@ -2,6 +2,16 @@ package com.viniison.axiom
 
 import android.app.AlertDialog
 import android.app.ActivityManager
+import android.content.ComponentName
+import android.content.ServiceConnection
+import android.os.Handler
+import android.os.IBinder
+import android.os.Looper
+import android.os.Message
+import android.os.Messenger
+import android.os.RemoteException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.flow
 import android.widget.ImageView
 import android.text.InputType
 import android.content.ClipData
@@ -69,6 +79,111 @@ class MainActivity : ComponentActivity() {
     private lateinit var searchButton: TextView
 
     private var model: LlamaModel? = null
+    private var heavyReady = false
+    private var heavyBound = false
+    private var heavyLoading = false
+    private var heavyMessenger: Messenger? = null
+    private var heavyStream: Channel<String>? = null
+    private var lastServiceDeath = false
+
+    private val heavyReceiver = Messenger(Handler(Looper.getMainLooper()) { packet ->
+        when (packet.what) {
+            HeavyInferenceService.READY -> {
+                heavyLoading = false
+                heavyReady = true
+                lastServiceDeath = false
+                panel.visibility = View.GONE
+                setBusy(false)
+                setStatus("● Qwen 1.5B ativo em processo separado • experimente uma pergunta curta")
+            }
+            HeavyInferenceService.TOKEN -> {
+                heavyStream?.trySend(packet.data.getString("text") ?: "")
+            }
+            HeavyInferenceService.DONE -> heavyStream?.close()
+            HeavyInferenceService.ERROR -> {
+                val reason = packet.data.getString("text") ?: "Erro desconhecido"
+                heavyLoading = false
+                heavyStream?.close(IllegalStateException(reason))
+                heavyReady = false
+                setBusy(false)
+                setStatus(reason + " • use o modelo 0.5B se continuar.")
+            }
+        }
+        true
+    })
+    private val heavyConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName, binder: IBinder) {
+            heavyMessenger = Messenger(binder)
+            val file = File(filesDir, "qwen2.5-1.5b-q4km.gguf")
+            sendHeavy(HeavyInferenceService.LOAD, "path", file.absolutePath)
+            setStatus("Preparando modelo avançado em processo separado…")
+        }
+        override fun onServiceDisconnected(name: ComponentName) {
+            onHeavyWorkerLost()
+        }
+        override fun onBindingDied(name: ComponentName) {
+            onHeavyWorkerLost()
+        }
+    }
+
+    private fun onHeavyWorkerLost() {
+        val wasWorking = heavyLoading || heavyStream != null || heavyReady
+        heavyReady = false
+        heavyLoading = false
+        heavyMessenger = null
+        heavyBound = false
+        heavyStream?.close(IllegalStateException("O processo do modelo avançado foi encerrado pelo Android."))
+        heavyStream = null
+        if (wasWorking) {
+            lastServiceDeath = true
+            prefs.edit().putBoolean("heavy_crash_v041", true).apply()
+            setStatus("O modelo 1.5B foi encerrado; suas conversas continuam salvas. Use o 0.5B.")
+            setBusy(false)
+        }
+    }
+
+    private fun sendHeavy(code: Int, key: String? = null, value: String? = null) {
+        try {
+            val request = Message.obtain(null, code)
+            request.replyTo = heavyReceiver
+            if (key != null) request.data = Bundle().apply { putString(key, value ?: "") }
+            heavyMessenger?.send(request)
+                ?: error("Processo de IA não conectado.")
+        } catch (e: Exception) {
+            setStatus("Não consegui comunicar com o modelo avançado: " + e.message)
+        }
+    }
+
+    private fun heavyResponse(prompt: String) = flow {
+        val stream = Channel<String>(Channel.UNLIMITED)
+        heavyStream = stream
+        sendHeavy(HeavyInferenceService.GENERATE, "prompt", prompt)
+        try {
+            for (token in stream) emit(token)
+        } finally {
+            if (heavyStream === stream) heavyStream = null
+            if (heavyReady) sendHeavy(HeavyInferenceService.CANCEL)
+        }
+    }
+
+    private fun startHeavyWorker() {
+        if (heavyBound) {
+            try { unbindService(heavyConnection) } catch (_: Exception) {}
+            heavyBound = false
+        }
+        heavyLoading = true
+        heavyReady = false
+        val connected = bindService(
+            Intent(this, HeavyInferenceService::class.java),
+            heavyConnection, Context.BIND_AUTO_CREATE
+        )
+        heavyBound = connected
+        if (!connected) {
+            heavyLoading = false
+            setBusy(false)
+            setStatus("Não foi possível iniciar o modelo avançado em processo separado.")
+        }
+    }
     private var generation: Job? = null
     private var busy = false
     private var attachmentBusy = false
@@ -166,6 +281,11 @@ class MainActivity : ComponentActivity() {
         effortButton = findViewById(R.id.btnEffort)
         searchButton = findViewById(R.id.btnSearch)
         highEffort = prefs.getBoolean("high_effort_v03", false)
+        // O modo alto gasta RAM e pode duplicar inferência: reiniciar sempre no normal.
+        if (highEffort) {
+            highEffort = false
+            prefs.edit().putBoolean("high_effort_v03", false).apply()
+        }
         searchEnabled = prefs.getBoolean("research_v03", false)
         refreshOptions()
 
@@ -209,14 +329,28 @@ class MainActivity : ComponentActivity() {
         send.setOnClickListener { sendMessage() }
         stop.setOnClickListener {
             model?.cancelGeneration()
+            if (heavyReady) sendHeavy(HeavyInferenceService.CANCEL)
             generation?.cancel()
         }
 
+        val lastRunInterrupted = prefs.getBoolean("inference_active_v041", false)
+        if (lastRunInterrupted) {
+            prefs.edit().putBoolean("heavy_crash_v041", true)
+                .putBoolean("inference_active_v041", false).apply()
+        }
         store.migrateLegacy(prefs)
         val previous = prefs.getLong("current_chat_id", -1L)
         val threadId = if (store.hasThread(previous)) previous
             else store.threads().firstOrNull()?.id ?: store.newThread()
         openChat(threadId)
+        if (lastRunInterrupted || prefs.getBoolean("heavy_crash_v041", false)) {
+            prefs.edit().putBoolean("heavy_crash_v041", false).apply()
+            AlertDialog.Builder(this)
+                .setTitle("AXIOM recuperada")
+                .setMessage("O modelo grande ou a geração anterior foi interrompida. As mensagens enviadas continuam no histórico. Use o modelo leve e Esforço Normal para evitar outro fechamento.")
+                .setPositiveButton("Entendi", null)
+                .show()
+        }
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -455,7 +589,7 @@ class MainActivity : ComponentActivity() {
 
     private fun setBusy(value: Boolean) {
         busy = value
-        send.isEnabled = !value && model != null
+        send.isEnabled = !value && (model != null || heavyReady)
         download.isEnabled = !value
         import.isEnabled = !value
         smartDownload.isEnabled = !value
@@ -626,7 +760,7 @@ class MainActivity : ComponentActivity() {
                 setStatus("Erro ao ler anexo: ${e.message}")
             } finally {
                 attachmentBusy = false
-                send.isEnabled = !busy && model != null
+                send.isEnabled = !busy && (model != null || heavyReady)
             }
         }
     }
@@ -786,6 +920,17 @@ class MainActivity : ComponentActivity() {
                 val previous = model
                 model = null
                 withContext(Dispatchers.Default) { previous?.close() }
+                if (heavy) {
+                    startHeavyWorker()
+                    return@launch
+                }
+                if (heavyBound) {
+                    sendHeavy(HeavyInferenceService.CANCEL)
+                    try { unbindService(heavyConnection) } catch (_: Exception) {}
+                    heavyBound = false
+                    heavyReady = false
+                    heavyMessenger = null
+                }
                 val loaded = LlamaModel.load(file.absolutePath) {
                     contextSize = if (heavy) 768 else 1536
                     batchSize = if (heavy) 32 else 128
@@ -808,7 +953,7 @@ class MainActivity : ComponentActivity() {
             } catch (e: Throwable) {
                 setStatus("Falha ao carregar IA: ${e.message ?: e.javaClass.simpleName}")
             } finally {
-                setBusy(false)
+                if (!heavyLoading) setBusy(false)
             }
         }
     }
@@ -874,7 +1019,9 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        val activeModel = model ?: run {
+        val usingHeavy = heavyReady
+        val activeModel = model
+        if (activeModel == null && !usingHeavy) {
             setStatus("Baixe ou selecione um modelo GGUF para conversar.")
             return
         }
@@ -890,11 +1037,18 @@ class MainActivity : ComponentActivity() {
         }
 
         val isFirst = history.none { it.role == "user" }
+        // Após encerramento nativo, reenviar exatamente a última pergunta não duplica
+        // o registro que já estava salvo no SQLite.
+        val pendingRetry = history.lastOrNull()?.let {
+            it.role == "user" && it.content == contextMessage
+        } == true
         if (isFirst) store.setTitle(thread, message)
-        val userMessageId = store.addMessage(thread, "user", contextMessage)
-        history.add(Message("user", contextMessage))
-        if (isFirst) messagesView.removeAllViews()
-        bubble(contextMessage, "user", userMessageId)
+        if (!pendingRetry) {
+            val userMessageId = store.addMessage(thread, "user", contextMessage)
+            history.add(Message("user", contextMessage))
+            if (isFirst) messagesView.removeAllViews()
+            bubble(contextMessage, "user", userMessageId)
+        }
         attachments.clear()
         pendingImages.clear()
         updateAttachments()
@@ -903,7 +1057,8 @@ class MainActivity : ComponentActivity() {
         setBusy(true)
         stop.visibility = View.VISIBLE
         send.visibility = View.GONE
-        setStatus(if (highEffort) "Esforço alto: analisando e revisando…" else "AXIOM está pensando…")
+        prefs.edit().putBoolean("inference_active_v041", true).commit()
+        setStatus(if (usingHeavy) "Modelo 1.5B em processo separado • gerando com cuidado…" else if (highEffort) "Esforço alto: analisando e revisando…" else "AXIOM está pensando…")
         val generated = StringBuilder()
         var answerId = -1L
         var lastSave = SystemClock.elapsedRealtime()
@@ -944,10 +1099,21 @@ class MainActivity : ComponentActivity() {
                     }
                     append("<|im_start|>assistant\n")
                 }
-                val heavy = activeModel.config.contextSize <= 768
+                val heavy = usingHeavy || (activeModel?.config?.contextSize ?: 512) <= 768
+                // Contexto bem compacto para 512 tokens no modelo 1.5B: mais
+                // histórico ultrapassaria a janela do contexto e poderia falhar.
+                val safePrompt = if (usingHeavy) buildString {
+                    append("<|im_start|>system\n")
+                    append("Você é AXIOM AI. Responda em português, com clareza. ")
+                    append("Admita incerteza, não invente fatos.\n<|im_end|>\n")
+                    append("<|im_start|>user\n")
+                    append(contextMessage.take(620).replace(
+                        Regex("\\[\\[axiom-image:[a-f0-9-]{36}\\.jpg\\]\\]"), ""))
+                    append("\n<|im_end|>\n<|im_start|>assistant\n")
+                } else prompt
                 val finalPrompt = if (highEffort && !heavy) {
                     setStatus("Modo alto: preparando primeira resposta…")
-                    val initial = activeModel.generate(prompt).take(1700)
+                    val initial = activeModel!!.generate(prompt).take(850)
                     setStatus("Modo alto: verificando e corrigindo a resposta…")
                     prompt + initial + "<|im_end|>\n" +
                         "<|im_start|>user\n" +
@@ -957,10 +1123,12 @@ class MainActivity : ComponentActivity() {
                         "<|im_end|>\n<|im_start|>assistant\n"
                 } else {
                     if (highEffort && heavy) setStatus("Modelo avançado em modo seguro: revisão dupla desativada para evitar travamento.")
-                    prompt
+                    safePrompt
                 }
 
-                activeModel.generateStream(finalPrompt).collect { chunk ->
+                val responseFlow = if (usingHeavy) heavyResponse(finalPrompt)
+                    else activeModel!!.generateStream(finalPrompt)
+                responseFlow.collect { chunk ->
                     generated.append(chunk)
                     out.text = generated.toString()
                     val now = SystemClock.elapsedRealtime()
@@ -980,6 +1148,7 @@ class MainActivity : ComponentActivity() {
                 setStatus("Falha ao responder: ${e.message}")
                 if (generated.isEmpty()) out.text = "Não consegui responder: ${e.message}"
             } finally {
+                prefs.edit().putBoolean("inference_active_v041", false).apply()
                 if (generated.isNotEmpty()) {
                     if (answerId < 0L) answerId = store.addMessage(thread, "assistant", generated.toString())
                     else store.updateMessage(answerId, generated.toString())
@@ -994,6 +1163,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         model?.cancelGeneration()
+        if (heavyBound) {
+            try { unbindService(heavyConnection) } catch (_: Exception) {}
+            heavyBound = false
+        }
         generation?.cancel()
         // O processo libera o runtime ao encerrar a Activity.
         super.onDestroy()
