@@ -144,7 +144,7 @@ class MainActivity : ComponentActivity() {
 
     private fun sendHeavy(code: Int, key: String? = null, value: String? = null) {
         try {
-            val request = Message.obtain(null, code)
+            val request = android.os.Message.obtain(null, code)
             request.replyTo = heavyReceiver
             if (key != null) request.data = Bundle().apply { putString(key, value ?: "") }
             heavyMessenger?.send(request)
